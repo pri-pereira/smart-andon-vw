@@ -6,203 +6,79 @@
  * - Cards com design moderno e responsivo
  * - Cores VW: Deep Blue (#001E50) e Pure White
  * - DatePicker para filtro por data
- * - Sistema de Ordenação (Urgência, Recentes, Modelo)
- * - Filtro Rápido (Risco de Parada)
- * 
- * OTIMIZAÇÕES:
- * - Optimistic UI: Atualização instantânea sem esperar servidor
- * - Toast discreto: 1 segundo apenas
- * - Performance: Sem re-renderizações desnecessárias
- * - Fuso Horário: America/Sao_Paulo forçado em todas as operações
  */
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import Header from '@/components/Header';
 import AlertaTacto from '@/components/AlertaTacto';
+import SuccessCheckmark from '@/components/SuccessCheckmark';
 import { useRegistroAndonSupabase } from '@/hooks/useRegistroAndonSupabase';
 import { useAuthRE } from '@/hooks/useAuthRE';
 import type { RegistroAndonDB } from '@/lib/supabase';
-import { CheckCircle2, Clock, Calendar, ArrowUpDown, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, Clock, Calendar } from 'lucide-react';
 import { useLocation } from 'wouter';
-import { formatarHorarioLocal } from '@/lib/utils-tempo';
-
-type SortOption = 'urgencia' | 'recentes' | 'modelo';
-
-/**
- * Função Poka-Yoke: Obtém a data de hoje em Brasília (YYYY-MM-DD)
- */
-function getHojeBrasilia(): string {
-  const agora = new Date();
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  return formatter.format(agora);
-}
-
-/**
- * Função Poka-Yoke: Compara se duas datas são o mesmo dia em Brasília
- * Ignora horas - compara apenas YYYY-MM-DD
- */
-function isMesmoDiaBrasilia(dataISO: string, dataSelecionada: string): boolean {
-  try {
-    const data1 = new Date(dataISO);
-    const formatter = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/Sao_Paulo',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    });
-    const data1Brasilia = formatter.format(data1);
-    return data1Brasilia === dataSelecionada;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Função: Calcula o tempo decorrido em segundos
- */
-function calcularTempoDecorrido(dataCriacao: string): number {
-  try {
-    const agora = new Date();
-    const criacao = new Date(dataCriacao);
-    return Math.floor((agora.getTime() - criacao.getTime()) / 1000);
-  } catch {
-    return 0;
-  }
-}
-
-/**
- * Função: Calcula o percentual de urgência (0-100)
- */
-function calcularPercentualUrgencia(dataCriacao: string, tempoTacto: number = 600): number {
-  const tempoDecorrido = calcularTempoDecorrido(dataCriacao);
-  return Math.min(100, (tempoDecorrido / tempoTacto) * 100);
-}
-
-/**
- * Componente Toast Discreto (1 segundo)
- */
-function ToastNotification({ message, visible }: { message: string; visible: boolean }) {
-  if (!visible) return null;
-
-  return (
-    <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <div className="bg-green-500 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 font-semibold text-sm">
-        <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
-        {message}
-      </div>
-    </div>
-  );
-}
+import { formatarHorarioLocal, isMesmoDia, getHojeBrasilia } from '@/lib/utils-tempo';
 
 export default function LogisticaSupabase() {
   const { registros, loading, error, concluirRegistro } = useRegistroAndonSupabase();
   const { user } = useAuthRE();
   const [, setLocation] = useLocation();
-  
-  // Estado para Optimistic UI
-  const [registrosConcluídosOtimista, setRegistrosConcluídosOtimista] = useState<Set<string>>(new Set());
-  
-  // Estado para Toast
-  const [showToast, setShowToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
+  const [registrosOrdenados, setRegistrosOrdenados] = useState<RegistroAndonDB[]>([]);
+  const [concluindoId, setConcluindoId] = useState<string | null>(null);
+  const [showSuccessCheckmark, setShowSuccessCheckmark] = useState(false);
+  const [sucessoMensagem, setSucessoMensagem] = useState('');
   
   // DatePicker state - Inicializado com a data de hoje no fuso de Brasília
-  const [dataSelecionada, setDataSelecionada] = useState<string>(getHojeBrasilia());
-  
-  // Estado de Ordenação e Filtro
-  const [sortOption, setSortOption] = useState<SortOption>('urgencia');
-  const [showOnlyRisco, setShowOnlyRisco] = useState(false);
-  const [showSortMenu, setShowSortMenu] = useState(false);
-
-  // Filtrar registros pela data selecionada (comparação apenas YYYY-MM-DD em Brasília)
-  // Usar useMemo para evitar re-cálculos desnecessários
-  const registrosFiltrados = useMemo(() => {
-    let filtered = registros
-      .filter((r) => isMesmoDiaBrasilia(r.criado_em, dataSelecionada));
-
-    // Aplicar filtro rápido (Risco de Parada)
-    if (showOnlyRisco) {
-      filtered = filtered.filter((r) => {
-        const percentual = calcularPercentualUrgencia(r.criado_em);
-        return percentual > 80;
-      });
-    }
-
-    // Aplicar ordenação
-    switch (sortOption) {
-      case 'urgencia':
-        // Ordena por urgência (menor tempo restante primeiro = maior percentual)
-        return filtered.sort((a, b) => {
-          const percentualA = calcularPercentualUrgencia(a.criado_em);
-          const percentualB = calcularPercentualUrgencia(b.criado_em);
-          return percentualB - percentualA; // Descendente (mais urgente primeiro)
-        });
-      
-      case 'recentes':
-        // Ordena por mais recentes
-        return filtered.sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
-      
-      case 'modelo':
-        // Agrupa por modelo (nome_peca)
-        return filtered.sort((a, b) => a.nome_peca.localeCompare(b.nome_peca));
-      
-      default:
-        return filtered;
-    }
-  }, [registros, dataSelecionada, sortOption, showOnlyRisco]);
-
-  const registrosPendentes = useMemo(() => {
-    return registrosFiltrados.filter((r) => r.status !== 'concluido' && !registrosConcluídosOtimista.has(r.id));
-  }, [registrosFiltrados, registrosConcluídosOtimista]);
-
-  const registrosConcluidos = useMemo(() => {
-    return registrosFiltrados.filter((r) => r.status === 'concluido' || registrosConcluídosOtimista.has(r.id));
-  }, [registrosFiltrados, registrosConcluídosOtimista]);
-
-  // Mostrar Toast por 1 segundo apenas
-  useEffect(() => {
-    if (showToast) {
-      const timer = setTimeout(() => setShowToast(false), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [showToast]);
-
-  // Função otimizada para concluir entrega com Optimistic UI
-  const handleConcluir = useCallback(
-    async (id: string, nomePeca: string) => {
-      if (!user) {
-        alert('Usuário não autenticado');
-        return;
-      }
-
-      // OPTIMISTIC UI: Atualizar estado imediatamente
-      setRegistrosConcluídosOtimista((prev) => new Set(prev).add(id));
-      setToastMessage(`Entrega de ${nomePeca} concluída!`);
-      setShowToast(true);
-
-      // Enviar para o servidor em background (sem bloquear a UI)
-      try {
-        await concluirRegistro(id, user.id);
-        console.log('Entrega concluída no servidor');
-      } catch (err) {
-        console.error('Erro ao concluir entrega no servidor:', err);
-        // Remover do estado otimista se falhar
-        setRegistrosConcluídosOtimista((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(id);
-          return newSet;
-        });
-        setToastMessage('Erro ao concluir entrega');
-        setShowToast(true);
-      }
-    },
-    [user, concluirRegistro]
+  const [dataSelecionada, setDataSelecionada] = useState<string>(
+    getHojeBrasilia()
   );
+
+  useEffect(() => {
+    const ordenados = [...registros].sort(
+      (a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
+    );
+    setRegistrosOrdenados(ordenados);
+  }, [registros]);
+
+  // Filtrar registros pela data selecionada (comparação no fuso de Brasília)
+  const registrosFiltrados = registrosOrdenados.filter((r) => {
+    return isMesmoDia(r.criado_em, dataSelecionada);
+  });
+
+  const registrosPendentes = registrosFiltrados.filter(
+    (r) => r.status !== 'concluido'
+  );
+
+  const registrosConcluidos = registrosFiltrados.filter(
+    (r) => r.status === 'concluido'
+  );
+
+  const handleConcluir = async (id: string, nomePeca: string) => {
+    if (!user) {
+      alert('Usuário não autenticado');
+      return;
+    }
+
+    setConcluindoId(id);
+    try {
+      const sucesso = await concluirRegistro(id, user.id);
+      if (sucesso) {
+        setSucessoMensagem(`Entrega de ${nomePeca} concluída!`);
+        setShowSuccessCheckmark(true);
+        
+        setTimeout(() => {
+          setShowSuccessCheckmark(false);
+          setConcluindoId(null);
+        }, 1500);
+      } else {
+        alert('Erro ao concluir entrega');
+        setConcluindoId(null);
+      }
+    } catch (err) {
+      alert('Erro ao concluir entrega');
+      setConcluindoId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -242,7 +118,7 @@ export default function LogisticaSupabase() {
 
           {/* Error Alert */}
           {error && (
-            <div className="bg-red-50 border-2 border-red-200 p-4 rounded-xl flex gap-3">
+            <div className="bg-red-50 border-2 border-red-200 p-4 rounded-xl flex gap-3 animate-in shake duration-300">
               <div className="text-red-600 text-2xl">⚠️</div>
               <div>
                 <p className="text-sm font-bold text-red-800">Erro ao carregar dados</p>
@@ -256,7 +132,7 @@ export default function LogisticaSupabase() {
             <div className="flex items-center gap-3 mb-4">
               <Calendar className="h-5 w-5 text-[#001E50]" />
               <label className="text-sm font-bold text-[#001E50] uppercase tracking-widest">
-                Filtrar por Data (Brasília)
+                Filtrar por Data
               </label>
             </div>
             <input
@@ -268,79 +144,6 @@ export default function LogisticaSupabase() {
             <p className="text-xs text-[#6B7280] mt-3 font-medium">
               Mostrando {registrosFiltrados.length} registro(s) para {new Date(dataSelecionada + 'T12:00:00').toLocaleDateString('pt-BR')}
             </p>
-          </div>
-
-          {/* Ordenação e Filtro Rápido */}
-          <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center">
-            {/* Botão de Ordenação */}
-            <div className="relative flex-1 md:flex-none">
-              <button
-                onClick={() => setShowSortMenu(!showSortMenu)}
-                className="w-full md:w-auto px-4 py-3 bg-white border-2 border-[#001E50]/20 hover:border-[#001E50] text-[#001E50] font-bold rounded-lg flex items-center justify-center gap-2 transition-all hover:shadow-md"
-              >
-                <ArrowUpDown className="h-5 w-5" />
-                Ordenar por: <span className="font-black">{sortOption === 'urgencia' ? 'Urgência' : sortOption === 'recentes' ? 'Recentes' : 'Modelo'}</span>
-              </button>
-              
-              {/* Dropdown Menu */}
-              {showSortMenu && (
-                <div className="absolute top-full left-0 mt-2 w-full md:w-48 bg-white border-2 border-[#001E50] rounded-lg shadow-xl z-10">
-                  <button
-                    onClick={() => {
-                      setSortOption('urgencia');
-                      setShowSortMenu(false);
-                    }}
-                    className={`w-full text-left px-4 py-3 font-semibold transition-colors ${
-                      sortOption === 'urgencia'
-                        ? 'bg-[#001E50] text-white'
-                        : 'text-[#001E50] hover:bg-[#001E50]/10'
-                    }`}
-                  >
-                    ⚠️ Urgência (Risco Primeiro)
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSortOption('recentes');
-                      setShowSortMenu(false);
-                    }}
-                    className={`w-full text-left px-4 py-3 font-semibold transition-colors border-t border-[#001E50]/10 ${
-                      sortOption === 'recentes'
-                        ? 'bg-[#001E50] text-white'
-                        : 'text-[#001E50] hover:bg-[#001E50]/10'
-                    }`}
-                  >
-                    🕐 Mais Recentes
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSortOption('modelo');
-                      setShowSortMenu(false);
-                    }}
-                    className={`w-full text-left px-4 py-3 font-semibold transition-colors border-t border-[#001E50]/10 ${
-                      sortOption === 'modelo'
-                        ? 'bg-[#001E50] text-white'
-                        : 'text-[#001E50] hover:bg-[#001E50]/10'
-                    }`}
-                  >
-                    🚗 Modelo de Carro
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Filtro Rápido (Toggle) */}
-            <div className="flex items-center gap-3 px-4 py-3 bg-white border-2 border-[#001E50]/20 rounded-lg hover:border-[#001E50] transition-all">
-              <AlertTriangle className={`h-5 w-5 ${showOnlyRisco ? 'text-red-600' : 'text-[#6B7280]'}`} />
-              <label className="text-sm font-bold text-[#001E50] uppercase tracking-widest cursor-pointer">
-                Apenas Risco
-              </label>
-              <input
-                type="checkbox"
-                checked={showOnlyRisco}
-                onChange={(e) => setShowOnlyRisco(e.target.checked)}
-                className="w-5 h-5 cursor-pointer accent-[#001E50]"
-              />
-            </div>
           </div>
 
           {/* Statistics Cards - Premium */}
@@ -397,8 +200,7 @@ export default function LogisticaSupabase() {
                 {registrosFiltrados.map((registro) => {
                   const horario = formatarHorarioLocal(registro.horario);
                   const tempoTactoSegundos = 600;
-                  const isConcluido = registro.status === 'concluido' || registrosConcluídosOtimista.has(registro.id);
-                  const percentualUrgencia = calcularPercentualUrgencia(registro.criado_em);
+                  const isConcluido = registro.status === 'concluido';
 
                   return (
                     <div 
@@ -406,20 +208,16 @@ export default function LogisticaSupabase() {
                       className={`rounded-2xl p-6 space-y-4 border-2 transition-all shadow-md hover:shadow-lg ${
                         isConcluido 
                           ? 'border-green-300 bg-green-50' 
-                          : percentualUrgencia > 80
-                          ? 'border-red-300 bg-red-50'
                           : 'border-[#001E50]/10 bg-white hover:border-[#001E50]/20'
                       }`}
                     >
-                      {/* Progress Bar */}
-                      {!isConcluido && (
-                        <AlertaTacto 
-                          dataCriacao={registro.criado_em} 
-                          tempoTactoSegundos={tempoTactoSegundos}
-                          concluido={false}
-                          tempoFinal={0}
-                        />
-                      )}
+                      {/* Progress Bar (Sempre visível conforme solicitado) */}
+                      <AlertaTacto 
+                        dataCriacao={registro.criado_em} 
+                        tempoTactoSegundos={tempoTactoSegundos}
+                        concluido={isConcluido}
+                        tempoFinal={registro.tempo_total_segundos || 0}
+                      />
 
                       {/* Status Concluído */}
                       {isConcluido && (
@@ -458,13 +256,14 @@ export default function LogisticaSupabase() {
                         </div>
                       </div>
 
-                      {/* Action Button - Desabilitado se já concluído */}
+                      {/* Action Button */}
                       {!isConcluido && (
                         <button
                           onClick={() => handleConcluir(registro.id, registro.nome_peca)}
-                          className="w-full px-4 py-3 bg-green-500 hover:bg-green-600 active:scale-95 text-white font-bold rounded-lg transition-all duration-200"
+                          disabled={concluindoId === registro.id}
+                          className="w-full px-4 py-3 bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white font-bold rounded-lg transition-colors disabled:cursor-not-allowed"
                         >
-                          ✓ Entrega Concluída
+                          {concluindoId === registro.id ? 'Concluindo...' : '✓ Entrega Concluída'}
                         </button>
                       )}
                     </div>
@@ -483,8 +282,11 @@ export default function LogisticaSupabase() {
         </div>
       </main>
 
-      {/* Toast Notification - Discreto no canto */}
-      <ToastNotification visible={showToast} message={toastMessage} />
+      {/* Success Checkmark */}
+      <SuccessCheckmark
+        visible={showSuccessCheckmark}
+        message={sucessoMensagem}
+      />
     </div>
   );
 }

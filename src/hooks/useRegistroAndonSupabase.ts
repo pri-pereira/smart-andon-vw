@@ -4,8 +4,6 @@
  * Gerencia registros de andon com Supabase Realtime
  * Sincronização automática com banco de dados PostgreSQL
  * Inclui rastreabilidade de conclusão e tempo total
- * 
- * POKA-YOKE: Fuso horário de Brasília (America/Sao_Paulo) forçado em todas as operações
  */
 
 import { useState, useCallback, useEffect } from 'react';
@@ -18,28 +16,6 @@ interface UseRegistroAndonReturn {
   adicionarRegistro: (registro: Omit<RegistroAndonDB, 'id' | 'criado_em' | 'horario'>) => Promise<RegistroAndonDB | null>;
   concluirRegistro: (id: string, usuarioId: string) => Promise<boolean>;
   carregarRegistros: () => Promise<void>;
-}
-
-/**
- * Função Poka-Yoke: Obtém a data/hora atual em Brasília (America/Sao_Paulo)
- * Força o fuso horário correto em todas as operações
- */
-function getDataHoraBrasilia(): string {
-  const agora = new Date();
-  // Converter para string ISO em Brasília
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
-  
-  const [dataPart, horaPart] = formatter.format(agora).split(', ');
-  return `${dataPart}T${horaPart}.000Z`;
 }
 
 export function useRegistroAndonSupabase(): UseRegistroAndonReturn {
@@ -123,13 +99,14 @@ export function useRegistroAndonSupabase(): UseRegistroAndonReturn {
       registro: Omit<RegistroAndonDB, 'id' | 'criado_em' | 'horario'>
     ): Promise<RegistroAndonDB | null> => {
       try {
-        // POKA-YOKE: Usar fuso horário de Brasília
-        const agoraBrasilia = getDataHoraBrasilia();
+        // Usamos o tempo do cliente (ISO) que o Supabase converterá para UTC no banco.
+        // O importante é que o cliente envie o momento exato.
+        const agora = new Date().toISOString();
         
-        console.log('Enviando registro para Supabase (Brasília):', {
+        console.log('Enviando registro para Supabase:', {
           ...registro,
-          horario: agoraBrasilia,
-          criado_em: agoraBrasilia,
+          horario: agora,
+          criado_em: agora,
           status: 'pendente',
         });
 
@@ -141,8 +118,8 @@ export function useRegistroAndonSupabase(): UseRegistroAndonReturn {
               codigo_peca: registro.codigo_peca,
               nome_peca: registro.nome_peca,
               celula: registro.celula,
-              horario: agoraBrasilia,
-              criado_em: agoraBrasilia,
+              horario: agora,
+              criado_em: agora,
               status: 'pendente',
             },
           ])
@@ -178,13 +155,12 @@ export function useRegistroAndonSupabase(): UseRegistroAndonReturn {
         throw new Error('Registro não encontrado');
       }
 
-      // POKA-YOKE: Usar fuso horário de Brasília
-      const agoraBrasilia = getDataHoraBrasilia();
+      const agora = new Date();
       const tempoTotalSegundos = Math.floor(
-        (new Date(agoraBrasilia).getTime() - new Date(registroAtual.criado_em).getTime()) / 1000
+        (agora.getTime() - new Date(registroAtual.criado_em).getTime()) / 1000
       );
       
-      console.log('Iniciando atualização de conclusão (Brasília):', {
+      console.log('Iniciando atualização de conclusão:', {
         id,
         usuarioId,
         tempoTotalSegundos,
@@ -193,7 +169,7 @@ export function useRegistroAndonSupabase(): UseRegistroAndonReturn {
       // Campos básicos que temos certeza que existem
       const updateData: any = {
         status: 'concluido',
-        concluido_em: agoraBrasilia,
+        concluido_em: agora.toISOString(),
         concluido_por: usuarioId,
         tempo_total_segundos: tempoTotalSegundos,
       };
