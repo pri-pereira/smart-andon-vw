@@ -17,7 +17,7 @@ import { useState, useMemo } from 'react';
 import Header from '@/components/Header';
 import { useRelatoriosDiarios } from '@/hooks/useRelatoriosDiarios';
 import { FileText, TrendingUp, AlertTriangle, CheckCircle2, Download, Clock, BarChart3, ArrowUpDown } from 'lucide-react';
-import { formatarSegundos, formatarHorarioLocal, formatarDataLocal, isMesmoDia } from '@/lib/utils-tempo';
+import { formatarSegundos, formatarHorarioLocal, formatarDataLocal, isMesmoDia, getHojeBrasilia, getDataISObrasilia } from '@/lib/utils-tempo';
 
 type SortOption = 'urgencia' | 'recentes' | 'modelo';
 
@@ -33,7 +33,7 @@ function calcularPercentualUrgencia(dataCriacao: string, tempoTacto: number = 60
 
 export default function Relatorio() {
   const { stats, registros, loading, error, gerarRelatorio, exportarPDF } = useRelatoriosDiarios();
-  const [dataSelecionada, setDataSelecionada] = useState(new Date().toISOString().split('T')[0]);
+  const [dataSelecionada, setDataSelecionada] = useState(getHojeBrasilia());
   const [sortOption, setSortOption] = useState<SortOption>('urgencia');
   const [showOnlyRisco, setShowOnlyRisco] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
@@ -46,16 +46,16 @@ export default function Relatorio() {
   // Calcular estatísticas dos últimos 7 dias
   const ultimosDias = useMemo(() => {
     const dias: { [key: string]: any } = {};
-    
+
     for (let i = 6; i >= 0; i--) {
       const data = new Date();
       data.setDate(data.getDate() - i);
-      const dataStr = data.toISOString().split('T')[0];
-      
+      const dataStr = getDataISObrasilia(data);
+
       const registrosDia = registros.filter(r => {
         return isMesmoDia(r.criado_em, dataStr);
       });
-      
+
       dias[dataStr] = {
         data: dataStr,
         total: registrosDia.length,
@@ -64,7 +64,7 @@ export default function Relatorio() {
         excedidos: registrosDia.filter(r => r.tempo_total_segundos && r.tempo_total_segundos > 600).length,
       };
     }
-    
+
     return dias;
   }, [registros]);
 
@@ -88,13 +88,13 @@ export default function Relatorio() {
           const percentualB = calcularPercentualUrgencia(b.criado_em);
           return percentualB - percentualA;
         });
-      
+
       case 'recentes':
         return filtered.sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
-      
+
       case 'modelo':
         return filtered.sort((a, b) => a.nome_peca.localeCompare(b.nome_peca));
-      
+
       default:
         return filtered;
     }
@@ -115,7 +115,7 @@ export default function Relatorio() {
     );
   }
 
-  const taxaConclusao = stats && stats.total_chamados > 0 
+  const taxaConclusao = stats && stats.total_chamados > 0
     ? ((stats.chamados_concluidos / stats.total_chamados) * 100).toFixed(1)
     : 0;
 
@@ -211,11 +211,10 @@ export default function Relatorio() {
             </div>
 
             {/* Variação */}
-            <div className={`bg-gradient-to-br rounded-2xl p-6 md:p-8 text-white shadow-lg border transition-shadow hover:shadow-xl ${
-              parseFloat(variacao) >= 0 
-                ? 'from-green-500 to-green-600 border-green-400/20' 
+            <div className={`bg-gradient-to-br rounded-2xl p-6 md:p-8 text-white shadow-lg border transition-shadow hover:shadow-xl ${parseFloat(variacao) >= 0
+                ? 'from-green-500 to-green-600 border-green-400/20'
                 : 'from-red-500 to-red-600 border-red-400/20'
-            }`}>
+              }`}>
               <p className="text-xs font-bold uppercase tracking-widest mb-2">
                 Variação
               </p>
@@ -301,13 +300,13 @@ export default function Relatorio() {
               <TrendingUp className="h-6 w-6" />
               Tendência (Últimos 7 dias)
             </h3>
-            
+
             <div className="space-y-4">
               {Object.entries(ultimosDias).map(([data, stats]: [string, any]) => {
                 const maxVolume = Math.max(...Object.values(ultimosDias).map((d: any) => d.total));
                 const percentual = maxVolume > 0 ? (stats.total / maxVolume) * 100 : 0;
                 const isHoje = data === dataSelecionada;
-                
+
                 return (
                   <div key={data} className={`space-y-2 p-4 rounded-lg ${isHoje ? 'bg-blue-50 border-2 border-blue-200' : 'bg-gray-50'}`}>
                     <div className="flex justify-between items-center mb-2">
@@ -319,7 +318,7 @@ export default function Relatorio() {
                       </span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
+                      <div
                         className={`h-2 rounded-full transition-all ${isHoje ? 'bg-blue-500' : 'bg-[#001E50]'}`}
                         style={{ width: `${percentual}%` }}
                       />
@@ -342,7 +341,7 @@ export default function Relatorio() {
                 <AlertTriangle className="h-6 w-6" />
                 Tempo Excedido (&gt; 600s)
               </h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div className="bg-white rounded-lg p-4 border border-red-200">
                   <p className="text-xs font-bold text-red-700 uppercase">Quantidade</p>
@@ -386,7 +385,7 @@ export default function Relatorio() {
                 <ArrowUpDown className="h-5 w-5" />
                 Ordenar por: <span className="font-black">{sortOption === 'urgencia' ? 'Urgência' : sortOption === 'recentes' ? 'Recentes' : 'Modelo'}</span>
               </button>
-              
+
               {/* Dropdown Menu */}
               {showSortMenu && (
                 <div className="absolute top-full left-0 mt-2 w-full md:w-48 bg-white border-2 border-[#001E50] rounded-lg shadow-xl z-10">
@@ -395,11 +394,10 @@ export default function Relatorio() {
                       setSortOption('urgencia');
                       setShowSortMenu(false);
                     }}
-                    className={`w-full text-left px-4 py-3 font-semibold transition-colors ${
-                      sortOption === 'urgencia'
+                    className={`w-full text-left px-4 py-3 font-semibold transition-colors ${sortOption === 'urgencia'
                         ? 'bg-[#001E50] text-white'
                         : 'text-[#001E50] hover:bg-[#001E50]/10'
-                    }`}
+                      }`}
                   >
                     ⚠️ Urgência (Risco Primeiro)
                   </button>
@@ -408,11 +406,10 @@ export default function Relatorio() {
                       setSortOption('recentes');
                       setShowSortMenu(false);
                     }}
-                    className={`w-full text-left px-4 py-3 font-semibold transition-colors border-t border-[#001E50]/10 ${
-                      sortOption === 'recentes'
+                    className={`w-full text-left px-4 py-3 font-semibold transition-colors border-t border-[#001E50]/10 ${sortOption === 'recentes'
                         ? 'bg-[#001E50] text-white'
                         : 'text-[#001E50] hover:bg-[#001E50]/10'
-                    }`}
+                      }`}
                   >
                     🕐 Mais Recentes
                   </button>
@@ -421,11 +418,10 @@ export default function Relatorio() {
                       setSortOption('modelo');
                       setShowSortMenu(false);
                     }}
-                    className={`w-full text-left px-4 py-3 font-semibold transition-colors border-t border-[#001E50]/10 ${
-                      sortOption === 'modelo'
+                    className={`w-full text-left px-4 py-3 font-semibold transition-colors border-t border-[#001E50]/10 ${sortOption === 'modelo'
                         ? 'bg-[#001E50] text-white'
                         : 'text-[#001E50] hover:bg-[#001E50]/10'
-                    }`}
+                      }`}
                   >
                     🚗 Modelo de Carro
                   </button>
@@ -454,7 +450,7 @@ export default function Relatorio() {
               <FileText className="h-6 w-6" />
               Detalhes de Todos os Registros ({registrosOrdenados.length})
             </h3>
-            
+
             {registrosOrdenados.length > 0 ? (
               <table className="w-full text-sm">
                 <thead>
@@ -475,20 +471,18 @@ export default function Relatorio() {
                       <td className="py-3 px-2 font-mono text-[#001E50]">{r.codigo_peca}</td>
                       <td className="py-3 px-2 text-[#6B7280]">{formatarHorarioLocal(r.horario)}</td>
                       <td className="py-3 px-2">
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                          r.status === 'concluido' 
-                            ? 'bg-green-100 text-green-700' 
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${r.status === 'concluido'
+                            ? 'bg-green-100 text-green-700'
                             : 'bg-amber-100 text-amber-700'
-                        }`}>
+                          }`}>
                           {r.status === 'concluido' ? '✓ Concluído' : '⏳ Pendente'}
                         </span>
                       </td>
                       <td className="py-3 px-2">
-                        <span className={`font-bold ${
-                          r.tempo_total_segundos && r.tempo_total_segundos > 600
+                        <span className={`font-bold ${r.tempo_total_segundos && r.tempo_total_segundos > 600
                             ? 'text-red-600'
                             : 'text-green-600'
-                        }`}>
+                          }`}>
                           {r.tempo_total_segundos ? formatarSegundos(r.tempo_total_segundos) : '-'}
                         </span>
                       </td>

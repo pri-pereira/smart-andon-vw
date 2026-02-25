@@ -16,6 +16,7 @@ import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, HardHat, ArrowLeft } from 'lucide-react';
 import Header from '@/components/Header';
+import { supabase } from '@/lib/supabase';
 
 interface Peca {
   id: string;
@@ -28,18 +29,18 @@ interface Peca {
 type Lado = 'LE' | 'LD' | null;
 
 /**
- * Função para obter a cor de fundo do card baseada na cor_logistica
+ * Função para obter a cor do item baseada na cor_logistica
  */
-function getCorFundo(cor: string): string {
-  const cores: Record<string, string> = {
-    'azul': 'from-blue-400 to-cyan-300',
-    'rosa': 'from-pink-400 to-rose-300',
-    'amarelo': 'from-yellow-400 to-amber-300',
-    'blue': 'from-blue-400 to-cyan-300',
-    'pink': 'from-pink-400 to-rose-300',
-    'yellow': 'from-yellow-400 to-amber-300',
+function getCorItem(cor: string): { bg: string; border: string; text: string } {
+  const cores: Record<string, { bg: string; border: string; text: string }> = {
+    'azul': { bg: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-900' },
+    'rosa': { bg: 'bg-pink-50', border: 'border-pink-300', text: 'text-pink-900' },
+    'amarelo': { bg: 'bg-yellow-50', border: 'border-yellow-300', text: 'text-yellow-900' },
+    'blue': { bg: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-900' },
+    'pink': { bg: 'bg-pink-50', border: 'border-pink-300', text: 'text-pink-900' },
+    'yellow': { bg: 'bg-yellow-50', border: 'border-yellow-300', text: 'text-yellow-900' },
   };
-  return cores[cor.toLowerCase()] || 'from-blue-400 to-cyan-300';
+  return cores[cor.toLowerCase()] || { bg: 'bg-gray-50', border: 'border-gray-300', text: 'text-gray-900' };
 }
 
 /**
@@ -78,7 +79,7 @@ const PECAS_MOCK: Peca[] = [
 
 export default function OperadorSupabase() {
   const [, setLocation] = useLocation();
-  const [step, setStep] = useState<'tacto' | 'lado' | 'pecas'>('tacto');
+  const [step, setStep] = useState<'tacto' | 'pecas'>('tacto');
   const [tactoSelecionado, setTactoSelecionado] = useState<number | null>(null);
   const [ladoSelecionado, setLadoSelecionado] = useState<Lado>(null);
   const [pecasSelecionadas, setPecasSelecionadas] = useState<Set<string>>(new Set());
@@ -114,20 +115,36 @@ export default function OperadorSupabase() {
       return;
     }
 
-    // Aqui seria feito o envio para Supabase
-    console.log({
-      tacto: tactoSelecionado,
-      lado: ladoSelecionado,
-      pecas: Array.from(pecasSelecionadas),
-    });
+    try {
+      // Obter as peças selecionadas com seus dados completos
+      const pecasParaEnviar = pecasFiltradas.filter(p => pecasSelecionadas.has(p.id));
 
-    // Resetar e voltar para home
-    alert('Peças enviadas com sucesso!');
-    setStep('tacto');
-    setTactoSelecionado(null);
-    setLadoSelecionado(null);
-    setPecasSelecionadas(new Set());
-    setLocation('/');
+      const novosRegistros = pecasParaEnviar.map(peca => ({
+        tacto: tactoSelecionado,
+        lado: ladoSelecionado,
+        codigo_peca: peca.codigo,
+        nome_peca: peca.nome,
+        status: 'pendente'
+      }));
+
+      // Inserir no Supabase real
+      const { error } = await supabase
+        .from('registros')
+        .insert(novosRegistros);
+
+      if (error) throw error;
+
+      // Resetar e voltar para home
+      alert('Peças enviadas com sucesso!');
+      setStep('tacto');
+      setTactoSelecionado(null);
+      setLadoSelecionado(null);
+      setPecasSelecionadas(new Set());
+      setLocation('/');
+    } catch (err: any) {
+      console.error('Erro ao enviar chamados:', err);
+      alert('Erro ao enviar para o servidor. Tente novamente.');
+    }
   };
 
   return (
@@ -137,7 +154,7 @@ export default function OperadorSupabase() {
       <main className="flex-1 p-4 md:p-6 pb-20">
         <div className="max-w-2xl mx-auto">
           <AnimatePresence mode="wait">
-            {/* STEP 1: Seleção de Tacto */}
+            {/* STEP 1: Seleção de Tacto e Lado */}
             {step === 'tacto' && (
               <motion.div
                 key="tacto"
@@ -145,115 +162,84 @@ export default function OperadorSupabase() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -50 }}
                 transition={{ duration: 0.3 }}
-                className="space-y-6"
+                className="space-y-8"
               >
                 <div className="text-center space-y-2">
                   <h2 className="text-4xl md:text-5xl font-black text-[#001E50] tracking-tight">
-                    Selecione o Tacto
+                    Informe os Dados
                   </h2>
                   <p className="text-base text-[#6B7280] font-medium">
-                    Escolha a estação de trabalho
+                    Selecione a estação de trabalho e o lado
                   </p>
                 </div>
 
-                {/* Grid de Tactos */}
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {tactos.map((tacto) => (
+                <div className="space-y-4">
+                  <h3 className="text-xl font-bold text-[#001E50]">1. Selecione o Tacto</h3>
+                  {/* Grid de Tactos */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {tactos.map((tacto) => (
+                      <motion.button
+                        key={tacto}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setTactoSelecionado(tacto)}
+                        className={`py-5 px-4 rounded-xl font-black text-2xl transition-all border-2 ${tactoSelecionado === tacto
+                            ? 'bg-[#001E50] text-white border-[#001E50] shadow-md'
+                            : 'bg-white border-[#001E50]/20 text-[#001E50] hover:border-[#001E50]/50'
+                          }`}
+                      >
+                        TACTO {tacto}
+                      </motion.button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xl font-bold text-[#001E50]">2. Selecione o Lado</h3>
+                  {/* Segmented Control - Lado */}
+                  <div className="flex gap-4 p-2 bg-[#F3F4F6] rounded-2xl">
                     <motion.button
-                      key={tacto}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => {
-                        setTactoSelecionado(tacto);
-                        setStep('lado');
-                      }}
-                      className={`py-6 px-4 rounded-2xl font-black text-2xl transition-all ${
-                        tactoSelecionado === tacto
-                          ? 'bg-[#001E50] text-white shadow-lg'
-                          : 'bg-white border-2 border-[#001E50]/20 text-[#001E50] hover:border-[#001E50]/50'
-                      }`}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setLadoSelecionado('LE')}
+                      className={`flex-1 py-4 px-6 rounded-xl font-black text-lg transition-all border-2 ${ladoSelecionado === 'LE'
+                          ? 'bg-[#001E50] text-white border-[#001E50] shadow-md'
+                          : 'bg-white border-transparent text-[#001E50] hover:border-[#001E50]/20'
+                        }`}
                     >
-                      TACTO {tacto}
+                      🔄 LE (Lado Esquerdo)
                     </motion.button>
-                  ))}
-                </div>
-
-                {/* Botão Voltar */}
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setLocation('/')}
-                  className="w-full py-3 px-4 bg-white border-2 border-[#001E50]/20 text-[#001E50] font-bold rounded-lg hover:border-[#001E50] transition-all flex items-center justify-center gap-2"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                  Voltar
-                </motion.button>
-              </motion.div>
-            )}
-
-            {/* STEP 2: Seleção de Lado */}
-            {step === 'lado' && (
-              <motion.div
-                key="lado"
-                initial={{ opacity: 0, x: 50 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -50 }}
-                transition={{ duration: 0.3 }}
-                className="space-y-6"
-              >
-                <div className="text-center space-y-2">
-                  <h2 className="text-4xl md:text-5xl font-black text-[#001E50] tracking-tight">
-                    Tacto {tactoSelecionado} Selecionado
-                  </h2>
-                  <p className="text-base text-[#6B7280] font-medium">
-                    Escolha o lado (LE/LD)
-                  </p>
-                </div>
-
-                {/* Segmented Control - Lado */}
-                <div className="flex gap-4 p-2 bg-[#F3F4F6] rounded-2xl">
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => setLadoSelecionado('LE')}
-                    className={`flex-1 py-4 px-6 rounded-xl font-black text-lg transition-all ${
-                      ladoSelecionado === 'LE'
-                        ? 'bg-[#001E50] text-white shadow-lg'
-                        : 'text-[#001E50] hover:bg-white'
-                    }`}
-                  >
-                    🔄 Lado Esquerdo (LE)
-                  </motion.button>
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => setLadoSelecionado('LD')}
-                    className={`flex-1 py-4 px-6 rounded-xl font-black text-lg transition-all ${
-                      ladoSelecionado === 'LD'
-                        ? 'bg-[#001E50] text-white shadow-lg'
-                        : 'text-[#001E50] hover:bg-white'
-                    }`}
-                  >
-                    🔄 Lado Direito (LD)
-                  </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setLadoSelecionado('LD')}
+                      className={`flex-1 py-4 px-6 rounded-xl font-black text-lg transition-all border-2 ${ladoSelecionado === 'LD'
+                          ? 'bg-[#001E50] text-white border-[#001E50] shadow-md'
+                          : 'bg-white border-transparent text-[#001E50] hover:border-[#001E50]/20'
+                        }`}
+                    >
+                      🔄 LD (Lado Direito)
+                    </motion.button>
+                  </div>
                 </div>
 
                 {/* Botões de Ação */}
-                <div className="flex gap-3">
+                <div className="flex gap-3 pt-4">
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => setStep('tacto')}
-                    className="flex-1 py-3 px-4 bg-white border-2 border-[#001E50]/20 text-[#001E50] font-bold rounded-lg hover:border-[#001E50] transition-all"
+                    onClick={() => setLocation('/')}
+                    className="flex-1 w-full py-4 px-4 bg-white border-2 border-[#001E50]/20 text-[#001E50] font-bold rounded-xl hover:border-[#001E50] transition-all flex items-center justify-center gap-2"
                   >
-                    ← Voltar
+                    <ArrowLeft className="h-5 w-5" />
+                    Voltar
                   </motion.button>
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => setStep('pecas')}
-                    disabled={!ladoSelecionado}
-                    className="flex-1 py-3 px-4 bg-[#001E50] text-white font-bold rounded-lg hover:bg-[#001E50]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                    disabled={!tactoSelecionado || !ladoSelecionado}
+                    className="flex-1 py-4 px-4 bg-[#001E50] text-white font-bold rounded-xl hover:bg-[#001E50]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-md"
                   >
                     Próximo →
                     <ChevronRight className="h-5 w-5" />
@@ -262,7 +248,7 @@ export default function OperadorSupabase() {
               </motion.div>
             )}
 
-            {/* STEP 3: Seleção de Peças com Glass-Cards */}
+            {/* STEP 2: Seleção de Peças na Lista */}
             {step === 'pecas' && (
               <motion.div
                 key="pecas"
@@ -281,51 +267,46 @@ export default function OperadorSupabase() {
                   </p>
                 </div>
 
-                {/* Grid de Glass-Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Lista de Peças Clean */}
+                <div className="space-y-3">
                   {pecasFiltradas.map((peca) => {
                     const isSelected = pecasSelecionadas.has(peca.id);
-                    const corGradient = getCorFundo(peca.cor_logistica);
+                    const cores = getCorItem(peca.cor_logistica);
 
                     return (
                       <motion.button
                         key={peca.id}
-                        whileHover={{ scale: 1.02, y: -4 }}
-                        whileTap={{ scale: 0.98 }}
+                        whileHover={{ scale: 1.01 }}
+                        whileTap={{ scale: 0.99 }}
                         onClick={() => handleSelecionarPeca(peca.id)}
-                        className={`relative overflow-hidden rounded-3xl p-6 backdrop-blur-md transition-all ${
-                          isSelected
-                            ? 'ring-4 ring-[#001E50] shadow-2xl'
-                            : 'shadow-lg hover:shadow-xl'
-                        }`}
+                        className={`w-full relative overflow-hidden rounded-xl p-4 transition-all border-2 text-left flex items-center justify-between ${isSelected
+                            ? `border-[#001E50] shadow-md ${cores.bg}`
+                            : `${cores.border} bg-white hover:shadow-sm`
+                          }`}
                       >
-                        {/* Background com Glassmorphism */}
-                        <div
-                          className={`absolute inset-0 bg-gradient-to-br ${corGradient} opacity-40 blur-xl`}
-                        />
-                        <div className="absolute inset-0 bg-white/30 backdrop-blur-sm" />
+                        {/* Indicador de cor logística sutil na borda esq */}
+                        <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${cores.bg.replace('50', '400')}`} />
 
                         {/* Content */}
-                        <div className="relative z-10 space-y-3 text-left">
+                        <div className="pl-3">
                           {/* Código da Peça */}
-                          <p className="text-2xl font-black text-[#001E50] tracking-tight">
+                          <p className={`text-xl font-black tracking-tight ${isSelected ? 'text-[#001E50]' : cores.text}`}>
                             {peca.codigo}
                           </p>
-
                           {/* Nome da Peça */}
                           <p className="text-sm font-semibold text-[#6B7280]">
                             {peca.nome}
                           </p>
+                        </div>
 
-                          {/* Indicador de Seleção */}
-                          {isSelected && (
-                            <div className="flex items-center gap-2 text-[#001E50] font-bold">
-                              <div className="h-5 w-5 bg-[#001E50] rounded-full flex items-center justify-center text-white text-sm">
-                                ✓
-                              </div>
-                              Selecionado
-                            </div>
-                          )}
+                        {/* Checkmark */}
+                        <div className={`h-8 w-8 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${isSelected
+                            ? 'bg-[#001E50] border-[#001E50] text-white'
+                            : 'border-[#6B7280] text-transparent'
+                          }`}>
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
                         </div>
                       </motion.button>
                     );
@@ -333,12 +314,12 @@ export default function OperadorSupabase() {
                 </div>
 
                 {/* Botões de Ação */}
-                <div className="flex gap-3">
+                <div className="flex gap-3 pt-4">
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => setStep('lado')}
-                    className="flex-1 py-3 px-4 bg-white border-2 border-[#001E50]/20 text-[#001E50] font-bold rounded-lg hover:border-[#001E50] transition-all"
+                    onClick={() => setStep('tacto')}
+                    className="flex-1 py-4 px-4 bg-white border-2 border-[#001E50]/20 text-[#001E50] font-bold rounded-xl hover:border-[#001E50] transition-all flex items-center justify-center gap-2"
                   >
                     ← Voltar
                   </motion.button>
@@ -347,7 +328,7 @@ export default function OperadorSupabase() {
                     whileTap={{ scale: 0.98 }}
                     onClick={handleConfirmar}
                     disabled={pecasSelecionadas.size === 0}
-                    className="flex-1 py-3 px-4 bg-green-500 text-white font-bold rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                    className="flex-1 py-4 px-4 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-md"
                   >
                     ✓ Confirmar ({pecasSelecionadas.size})
                   </motion.button>

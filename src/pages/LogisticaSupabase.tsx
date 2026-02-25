@@ -17,7 +17,7 @@ import { useAuthRE } from '@/hooks/useAuthRE';
 import type { RegistroAndonDB } from '@/lib/supabase';
 import { CheckCircle2, Clock, Calendar } from 'lucide-react';
 import { useLocation } from 'wouter';
-import { formatarHorarioLocal, isMesmoDia, getHojeBrasilia } from '@/lib/utils-tempo';
+import { formatarHorarioLocal, isMesmoDia, getHojeBrasilia, getDataISObrasilia } from '@/lib/utils-tempo';
 
 export default function LogisticaSupabase() {
   const { registros, loading, error, concluirRegistro } = useRegistroAndonSupabase();
@@ -27,7 +27,7 @@ export default function LogisticaSupabase() {
   const [concluindoId, setConcluindoId] = useState<string | null>(null);
   const [showSuccessCheckmark, setShowSuccessCheckmark] = useState(false);
   const [sucessoMensagem, setSucessoMensagem] = useState('');
-  
+
   // DatePicker state - Inicializado com a data de hoje no fuso de Brasília
   const [dataSelecionada, setDataSelecionada] = useState<string>(
     getHojeBrasilia()
@@ -42,8 +42,8 @@ export default function LogisticaSupabase() {
 
   // Filtrar registros pela data selecionada (comparação no fuso de Brasília)
   const registrosFiltrados = registrosOrdenados.filter((r) => {
-    // Comparar apenas a parte YYYY-MM-DD
-    const dataRegistro = r.criado_em.split('T')[0];
+    // Comparar com a data no fuso correto (Brasília) em vez de UTC
+    const dataRegistro = getDataISObrasilia(r.criado_em);
     return dataRegistro === dataSelecionada;
   });
 
@@ -67,7 +67,7 @@ export default function LogisticaSupabase() {
       if (sucesso) {
         setSucessoMensagem(`Entrega de ${nomePeca} concluída!`);
         setShowSuccessCheckmark(true);
-        
+
         setTimeout(() => {
           setShowSuccessCheckmark(false);
           setConcluindoId(null);
@@ -88,9 +88,9 @@ export default function LogisticaSupabase() {
         <div className="text-center space-y-6">
           <div className="flex justify-center">
             <div className="bg-[#001E50]/10 p-6 rounded-2xl">
-              <img 
-                src="/vw-logo.png" 
-                alt="Volkswagen" 
+              <img
+                src="/vw-logo.png"
+                alt="Volkswagen"
                 className="h-16 w-16 md:h-20 md:w-20 object-contain opacity-50 animate-pulse"
               />
             </div>
@@ -205,17 +205,16 @@ export default function LogisticaSupabase() {
                   const isConcluido = registro.status === 'concluido';
 
                   return (
-                    <div 
-                      key={registro.id} 
-                      className={`rounded-2xl p-6 space-y-4 border-2 transition-all shadow-md hover:shadow-lg ${
-                        isConcluido 
-                          ? 'border-green-300 bg-green-50' 
+                    <div
+                      key={registro.id}
+                      className={`rounded-2xl p-6 space-y-4 border-2 transition-all shadow-md hover:shadow-lg ${isConcluido
+                          ? 'border-green-300 bg-green-50'
                           : 'border-[#001E50]/10 bg-white hover:border-[#001E50]/20'
-                      }`}
+                        }`}
                     >
                       {/* Progress Bar (Sempre visível conforme solicitado) */}
-                      <AlertaTacto 
-                        dataCriacao={registro.criado_em} 
+                      <AlertaTacto
+                        dataCriacao={registro.criado_em}
                         tempoTactoSegundos={tempoTactoSegundos}
                         concluido={isConcluido}
                         tempoFinal={registro.tempo_total_segundos || 0}
@@ -233,7 +232,7 @@ export default function LogisticaSupabase() {
                           </div>
                         </div>
                       )}
-                      
+
                       {/* Details Grid */}
                       <div className="grid grid-cols-2 gap-3 text-sm">
                         <div className="bg-[#F3F4F6] rounded-lg p-3">
