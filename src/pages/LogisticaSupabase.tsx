@@ -42,7 +42,9 @@ export default function LogisticaSupabase() {
 
   // Filtrar registros pela data selecionada (comparação no fuso de Brasília)
   const registrosFiltrados = registrosOrdenados.filter((r) => {
-    return isMesmoDia(r.criado_em, dataSelecionada);
+    // Comparar apenas a parte YYYY-MM-DD
+    const dataRegistro = r.criado_em.split('T')[0];
+    return dataRegistro === dataSelecionada;
   });
 
   const registrosPendentes = registrosFiltrados.filter(
@@ -142,7 +144,7 @@ export default function LogisticaSupabase() {
               className="w-full px-4 py-3 border-2 border-[#001E50]/20 rounded-lg font-semibold text-[#001E50] focus:outline-none focus:border-[#001E50] transition-colors"
             />
             <p className="text-xs text-[#6B7280] mt-3 font-medium">
-              Mostrando {registrosFiltrados.length} registro(s) para {new Date(dataSelecionada + 'T12:00:00').toLocaleDateString('pt-BR')}
+              Mostrando {registrosFiltrados.length} registro(s) para {new Date(dataSelecionada + 'T00:00:00').toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
             </p>
           </div>
 
@@ -157,7 +159,7 @@ export default function LogisticaSupabase() {
                 {registrosFiltrados.length}
               </p>
               <p className="text-sm text-blue-100 mt-3 font-medium">
-                {new Date(dataSelecionada + 'T12:00:00').toLocaleDateString('pt-BR')}
+                {new Date(dataSelecionada + 'T00:00:00').toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
               </p>
             </div>
 
@@ -192,7 +194,7 @@ export default function LogisticaSupabase() {
           <div className="space-y-4">
             <h3 className="text-2xl font-bold text-[#001E50] flex items-center gap-2">
               <div className="h-1 w-1 bg-[#001E50] rounded-full" />
-              Lista de Entregas - {new Date(dataSelecionada + 'T12:00:00').toLocaleDateString('pt-BR')}
+              Lista de Entregas - {new Date(dataSelecionada + 'T00:00:00').toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
             </h3>
 
             {registrosFiltrados.length > 0 ? (
@@ -274,7 +276,7 @@ export default function LogisticaSupabase() {
               <div className="text-center py-12 bg-white rounded-2xl border-2 border-dashed border-[#001E50]/20">
                 <Clock className="h-12 w-12 text-[#6B7280] mx-auto mb-4 opacity-50" />
                 <p className="text-[#6B7280] font-semibold">
-                  Nenhum registro para {new Date(dataSelecionada + 'T12:00:00').toLocaleDateString('pt-BR')}
+                  Nenhum registro para {new Date(dataSelecionada + 'T00:00:00').toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
                 </p>
               </div>
             )}

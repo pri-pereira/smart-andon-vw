@@ -4,6 +4,7 @@ interface User {
   id: string;
   email: string;
   name?: string;
+  role?: 'admin' | 'user';
 }
 
 export function useAuthRE() {
@@ -14,11 +15,14 @@ export function useAuthRE() {
   useEffect(() => {
     // Simular carregamento de usuário
     const authToken = localStorage.getItem("authToken");
+    const userRole = localStorage.getItem("userRole") as 'admin' | 'user' || 'user';
+    
     if (authToken) {
       setUser({
         id: "1",
         email: "user@example.com",
         name: "Usuário",
+        role: userRole,
       });
     }
     setLoading(false);
@@ -28,11 +32,16 @@ export function useAuthRE() {
     try {
       setLoading(true);
       // Simulação de login
+      // Se o email contiver "admin", definimos como admin para testes
+      const role = email.includes('admin') ? 'admin' : 'user';
       localStorage.setItem("authToken", "dummy-token");
+      localStorage.setItem("userRole", role);
+      
       setUser({
         id: "1",
         email,
         name: "Usuário",
+        role: role,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao fazer login");

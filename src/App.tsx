@@ -50,13 +50,19 @@ function Router() {
         <Redirect to="/logistica-dashboard" />
       </Route>
 
-      {/* Rota Admin - Proteção interna na página */}
-      <Route path="/admin" component={AdminCatalogo} />
+      {/* Rota Admin - Protegida */}
+      <Route path="/admin">
+        {() => (
+          <ProtectedRoute adminOnly={true}>
+            <AdminCatalogo />
+          </ProtectedRoute>
+        )}
+      </Route>
 
-      {/* Rotas protegidas - Relatório */}
+      {/* Rota Relatório - Protegida */}
       <Route path="/relatorio">
         {() => (
-          <ProtectedRoute>
+          <ProtectedRoute adminOnly={true}>
             <Relatorio />
           </ProtectedRoute>
         )}

@@ -7,9 +7,11 @@
 
 import { useLocation } from 'wouter';
 import { HardHat, Truck, ArrowRight, HelpCircle, FileText } from 'lucide-react';
+import { useAuthRE } from '@/hooks/useAuthRE';
 
 export default function Home() {
   const [, setLocation] = useLocation();
+  const { user } = useAuthRE();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-blue-50 to-white flex flex-col">
@@ -121,12 +123,14 @@ export default function Home() {
                 Ver Apresentação do Projeto
               </a>
               <span className="hidden md:inline text-[#001E50]/20">•</span>
-              <button
-                onClick={() => setLocation('/admin')}
-                className="text-sm text-[#6B7280] hover:text-[#001E50] font-medium transition-colors"
-              >
-                Acesso Administrativo →
-              </button>
+              {user?.role === 'admin' && (
+                <button
+                  onClick={() => setLocation('/admin')}
+                  className="text-sm text-[#6B7280] hover:text-[#001E50] font-medium transition-colors"
+                >
+                  Acesso Administrativo →
+                </button>
+              )}
             </div>
           </div>
         </div>
