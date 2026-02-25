@@ -20,7 +20,7 @@ import { useLocation } from 'wouter';
 import { formatarHorarioLocal, isMesmoDia, getHojeBrasilia, getDataISObrasilia } from '@/lib/utils-tempo';
 
 export default function LogisticaSupabase() {
-  const { registros, loading, error, concluirRegistro } = useRegistroAndonSupabase();
+  const { registros, loading, error, marcarComoEntregue } = useRegistroAndonSupabase();
   const { user } = useAuthRE();
   const [, setLocation] = useLocation();
   const [registrosOrdenados, setRegistrosOrdenados] = useState<RegistroAndonDB[]>([]);
@@ -52,10 +52,10 @@ export default function LogisticaSupabase() {
   );
 
   const registrosConcluidos = registrosFiltrados.filter(
-    (r) => r.status === 'concluido'
+    (r) => r.status === 'concluido' || r.status === 'entregue'
   );
 
-  const handleConcluir = async (id: string, nomePeca: string) => {
+  const handleEntregar = async (id: string, nomePeca: string) => {
     if (!user) {
       alert('Usuário não autenticado');
       return;
@@ -63,9 +63,9 @@ export default function LogisticaSupabase() {
 
     setConcluindoId(id);
     try {
-      const sucesso = await concluirRegistro(id, user.id);
+      const sucesso = await marcarComoEntregue(id, user.id);
       if (sucesso) {
-        setSucessoMensagem(`Entrega de ${nomePeca} concluída!`);
+        setSucessoMensagem(`Entrega de ${nomePeca} sinalizada! Aguardando o Operador.`);
         setShowSuccessCheckmark(true);
 
         setTimeout(() => {
@@ -73,11 +73,11 @@ export default function LogisticaSupabase() {
           setConcluindoId(null);
         }, 1500);
       } else {
-        alert('Erro ao concluir entrega');
+        alert('Erro ao sinalizar entrega');
         setConcluindoId(null);
       }
     } catch (err) {
-      alert('Erro ao concluir entrega');
+      alert('Erro ao sinalizar entrega');
       setConcluindoId(null);
     }
   };
@@ -104,7 +104,7 @@ export default function LogisticaSupabase() {
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
-      <Header title="Dashboard - Logística" showNav={true} />
+      <Header title="Dashboard - Logística" showBackButton={true} />
 
       <main className="flex-1 p-4 md:p-6 pb-20">
         <div className="max-w-5xl mx-auto space-y-6">
@@ -207,28 +207,37 @@ export default function LogisticaSupabase() {
                   return (
                     <div
                       key={registro.id}
-                      className={`rounded-2xl p-6 space-y-4 border-2 transition-all shadow-md hover:shadow-lg ${isConcluido
-                          ? 'border-green-300 bg-green-50'
-                          : 'border-[#001E50]/10 bg-white hover:border-[#001E50]/20'
+                      className={`rounded-3xl p-6 space-y-4 border-2 transition-all shadow-[0_10px_30px_-10px_rgba(0,0,0,0.1)] hover:shadow-[0_10px_30px_-5px_rgba(0,0,0,0.15)] bg-white/50 backdrop-blur-sm ${isConcluido
+                        ? 'border-gray-200 opacity-60'
+                        : registro.status === 'entregue'
+                          ? 'border-blue-400 bg-blue-50/50'
+                          : 'border-[#001E50]/10 hover:border-[#001E50]/20'
                         }`}
                     >
                       {/* Progress Bar (Sempre visível conforme solicitado) */}
                       <AlertaTacto
                         dataCriacao={registro.criado_em}
                         tempoTactoSegundos={tempoTactoSegundos}
-                        concluido={isConcluido}
+                        status={registro.status}
                         tempoFinal={registro.tempo_total_segundos || 0}
                       />
 
-                      {/* Status Concluído */}
-                      {isConcluido && (
-                        <div className="bg-green-100 border-2 border-green-300 rounded-xl p-4 flex items-center gap-3">
-                          <CheckCircle2 className="h-6 w-6 text-green-600 flex-shrink-0" />
+                      {/* Status Entregue / Concluído */}
+                      {isConcluido ? (
+                        <div className="bg-gray-100 border-2 border-gray-200 rounded-2xl p-4 flex items-center gap-3">
+                          <CheckCircle2 className="h-6 w-6 text-gray-500 flex-shrink-0" />
                           <div>
-                            <p className="font-bold text-green-800 text-sm">Entrega Concluída</p>
-                            <p className="text-xs text-green-700">
+                            <p className="font-bold text-gray-700 text-sm">Recebido pelo OP</p>
+                            <p className="text-xs text-gray-500">
                               {registro.concluido_em && formatarHorarioLocal(registro.concluido_em)}
                             </p>
+                          </div>
+                        </div>
+                      ) : registro.status === 'entregue' && (
+                        <div className="bg-blue-100 border-2 border-blue-300 rounded-2xl p-4 flex items-center gap-3">
+                          <CheckCircle2 className="h-6 w-6 text-blue-600 flex-shrink-0" />
+                          <div>
+                            <p className="font-bold text-blue-800 text-sm">Sinalizado. Aguardando OP.</p>
                           </div>
                         </div>
                       )}
@@ -258,13 +267,13 @@ export default function LogisticaSupabase() {
                       </div>
 
                       {/* Action Button */}
-                      {!isConcluido && (
+                      {(!isConcluido && registro.status !== 'entregue') && (
                         <button
-                          onClick={() => handleConcluir(registro.id, registro.nome_peca)}
+                          onClick={() => handleEntregar(registro.id, registro.nome_peca)}
                           disabled={concluindoId === registro.id}
-                          className="w-full px-4 py-3 bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white font-bold rounded-lg transition-colors disabled:cursor-not-allowed"
+                          className="w-full px-4 py-4 bg-[#001E50] hover:bg-blue-900 disabled:bg-blue-300 text-white shadow-lg shadow-[#001E50]/30 font-bold rounded-2xl transition-all disabled:cursor-not-allowed active:scale-95"
                         >
-                          {concluindoId === registro.id ? 'Concluindo...' : '✓ Entrega Concluída'}
+                          {concluindoId === registro.id ? 'Sinalizando...' : 'Sinalizar Entrega 📦'}
                         </button>
                       )}
                     </div>
@@ -283,11 +292,12 @@ export default function LogisticaSupabase() {
         </div>
       </main>
 
-      {/* Success Checkmark */}
-      <SuccessCheckmark
-        visible={showSuccessCheckmark}
-        message={sucessoMensagem}
-      />
+      {/* Feedback de Sucesso */}
+      {showSuccessCheckmark && (
+        <SuccessCheckmark
+          message={sucessoMensagem}
+        />
+      )}
     </div>
   );
 }

@@ -1,41 +1,30 @@
 import { useEffect, useState } from 'react';
 import { formatarSegundosMMSS } from '@/lib/utils-tempo';
+import { motion } from 'framer-motion';
 
 interface AlertaTactoProps {
   dataCriacao: string;
   tempoTactoSegundos?: number;
-  concluido?: boolean;
+  status?: string;
   tempoFinal?: number;
 }
 
-/**
- * Componente de Barra de Progresso Horizontal - Smart Andon VW
- * 
- * Lógica da Barra:
- * - Preenchimento horizontal conforme o tempo passa (baseado no tacto de 600s).
- * - Cores Dinâmicas:
- *   - Verde: Até 50% do tempo.
- *   - Amarelo: De 50% a 80% (Alerta).
- *   - Vermelho: Acima de 80% (Risco de Parada).
- * - Estilo: Azul Volkswagen (#001E50) para o recipiente.
- * - Texto: Tempo em formato MM:SS por cima da barra.
- */
-const AlertaTacto = ({ 
-  dataCriacao, 
+export default function AlertaTacto({
+  dataCriacao,
   tempoTactoSegundos = 600,
-  concluido = false,
+  status = 'pendente',
   tempoFinal = 0
-}: AlertaTactoProps) => {
+}: AlertaTactoProps) {
   const [segundosDecorridos, setSegundosDecorridos] = useState(0);
 
+  const isFinalizado = status === 'concluido' || status === 'entregue';
+
   useEffect(() => {
-    // Se concluído, usar o tempo final
-    if (concluido) {
+    if (isFinalizado) {
       setSegundosDecorridos(tempoFinal > 0 ? tempoFinal : 0);
       return;
     }
 
-    // Se não concluído, continuar contando
     const atualizarContagem = () => {
       const inicio = new Date(dataCriacao).getTime();
       const agora = new Date().getTime();
@@ -43,63 +32,58 @@ const AlertaTacto = ({
       setSegundosDecorridos(decorridos > 0 ? decorridos : 0);
     };
 
-    atualizarContagem(); // Execução inicial
+    atualizarContagem();
     const intervalo = setInterval(atualizarContagem, 1000);
 
     return () => clearInterval(intervalo);
-  }, [dataCriacao, concluido, tempoFinal]);
+  }, [dataCriacao, isFinalizado, tempoFinal]);
 
-  const percentual = (segundosDecorridos / tempoTactoSegundos) * 100;
-  
-  // Definição das cores baseada na urgência (Requisitos do Usuário)
-  let corPreenchimento = "bg-green-500"; // Verde: Até 50%
-  let textoStatus = "FLUXO NORMAL";
+  const percentualRaw = (segundosDecorridos / tempoTactoSegundos) * 100;
+  const percentual = Math.min(percentualRaw, 100);
 
-  if (percentual > 80) {
-    corPreenchimento = "bg-red-500"; // Vermelho: Acima de 80%
-    textoStatus = "RISCO DE PARADA";
-  } else if (percentual > 50) {
-    corPreenchimento = "bg-yellow-400"; // Amarelo: 50% a 80%
+  // Cores: Verde (0-50%), Amarelo (50-80%), Vermelho (>80%)
+  let corPreenchimento = "bg-green-500 shadow-green-500/50";
+  let textoStatus = "NO PRAZO";
+
+  if (segundosDecorridos > 480) { // 80% of 600s
+    corPreenchimento = "bg-red-500 shadow-red-500/50";
+    textoStatus = "RISCO PARADA";
+  } else if (segundosDecorridos > 300) { // 50% of 600s
+    corPreenchimento = "bg-yellow-400 shadow-yellow-400/50";
     textoStatus = "ALERTA";
   }
 
-  if (concluido) {
-    corPreenchimento = "bg-blue-400";
+  if (status === 'entregue') {
+    corPreenchimento = "bg-blue-400 shadow-blue-400/50";
+    textoStatus = "ENTREGUE (AGUARDANDO OP)";
+  } else if (status === 'concluido') {
+    corPreenchimento = "bg-gray-400 shadow-gray-400/50";
     textoStatus = "CONCLUÍDO";
   }
 
   return (
     <div className="w-full space-y-2">
-      {/* Cabeçalho da Barra: Status e Tempo */}
       <div className="flex justify-between items-end">
-        <span className={`text-[10px] font-black tracking-tighter ${concluido ? 'text-gray-400' : 'text-[#001E50]'}`}>
+        <span className={`text-[11px] font-black tracking-widest ${isFinalizado ? 'text-gray-400' : 'text-[#001E50]'}`}>
           {textoStatus}
         </span>
-        <span className="text-sm font-mono font-bold text-[#001E50]">
+        <span className={`text-base font-mono font-black ${isFinalizado ? 'text-gray-400' : 'text-[#001E50]'}`}>
           {formatarSegundosMMSS(segundosDecorridos)}
-          <span className="text-[10px] text-gray-400 ml-1">/ {formatarSegundosMMSS(tempoTactoSegundos)}</span>
+          <span className="text-[11px] text-gray-400 ml-1">/ {formatarSegundosMMSS(tempoTactoSegundos)}</span>
         </span>
       </div>
 
-      {/* Recipiente da Barra (Azul Volkswagen #001E50) */}
-      <div className="w-full bg-[#001E50] rounded-full h-4 p-[2px] shadow-inner overflow-hidden">
-        <div 
-          className={`h-full rounded-full transition-all duration-1000 ease-linear ${corPreenchimento} ${!concluido && percentual > 80 ? 'animate-pulse' : ''}`}
-          style={{ width: `${Math.min(percentual, 100)}%` }}
+      <div className="w-full bg-gray-100 rounded-full h-3 lg:h-4 overflow-hidden shadow-inner relative">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${percentual}%` }}
+          transition={{ duration: 1, ease: 'linear' }}
+          className={`h-full rounded-full ${corPreenchimento} shadow-[0_0_10px_rgba(0,0,0,0.5)]`}
         >
-          {/* Brilho sutil na barra */}
-          <div className="w-full h-full bg-white/20 rounded-full"></div>
-        </div>
+          {/* Reflexo glass interno */}
+          <div className="w-full h-full bg-gradient-to-b from-white/30 to-transparent rounded-full" />
+        </motion.div>
       </div>
-      
-      {/* Alerta Crítico abaixo da barra se necessário */}
-      {!concluido && percentual > 100 && (
-        <p className="text-[10px] font-bold text-red-600 animate-bounce text-center">
-          ⚠️ TEMPO DE TACTO EXCEDIDO
-        </p>
-      )}
     </div>
   );
-};
-
-export default AlertaTacto;
+}

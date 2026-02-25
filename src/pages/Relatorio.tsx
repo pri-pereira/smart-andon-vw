@@ -101,7 +101,7 @@ export default function Relatorio() {
   }, [registros, sortOption, showOnlyRisco]);
 
   const volumeDia = ultimosDias[dataSelecionada]?.total || 0;
-  const volumeMedia = Object.values(ultimosDias).reduce((acc, d: any) => acc + d.total, 0) / 7;
+  const volumeMedia = Object.values(ultimosDias).reduce((acc: number, d: any) => acc + d.total, 0) / 7;
   const variacao = ((volumeDia - volumeMedia) / volumeMedia * 100).toFixed(1);
 
   if (loading && !stats) {
@@ -139,38 +139,69 @@ export default function Relatorio() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-blue-50 to-white flex flex-col">
-      <Header title="Relatório Comparativo" showNav={true} />
+      <Header title="Relatório Comparativo" showBackButton={true} />
 
       <main className="flex-1 p-4 md:p-6 pb-20">
         <div className="max-w-6xl mx-auto space-y-6">
-          {/* Header com Seletor de Data */}
-          <div className="flex flex-col md:flex-row gap-4 items-center justify-between pb-6 border-b-2 border-[#001E50]/10">
-            <div className="space-y-2">
-              <h2 className="text-4xl md:text-5xl font-black text-[#001E50] tracking-tight">
+          {/* Header */}
+          <div className="flex flex-col md:flex-row gap-4 items-center justify-between pb-6 border-b-2 border-[#001E50]/5">
+            <div className="space-y-2 text-center md:text-left">
+              <h2 className="text-4xl md:text-5xl font-black text-[#001E50] tracking-tighter uppercase">
                 Relatório Comparativo
               </h2>
-              <p className="text-base text-[#6B7280] font-medium">
-                Análise de Volume: Dia vs Histórico
+              <p className="text-base text-[#6B7280] font-bold">
+                Análise de Volume e Performance
               </p>
             </div>
-            <div className="flex flex-col md:flex-row gap-3 items-center">
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-semibold text-[#001E50]">Data:</label>
+            <div className="flex gap-3">
+              <button
+                onClick={exportarPDF}
+                disabled={!stats}
+                className="flex items-center gap-2 px-6 py-3 bg-[#001E50] text-white font-black rounded-2xl hover:bg-[#001E50]/90 disabled:opacity-50 active:scale-95 transition-all shadow-lg"
+              >
+                <Download className="h-5 w-5" />
+                Exportar (PDF)
+              </button>
+            </div>
+          </div>
+
+          {/* Mini Calendário (Scroll Horizontal) */}
+          <div className="bg-white border-2 border-gray-100 rounded-3xl p-6 shadow-md">
+            <h3 className="text-[#001E50] font-black uppercase tracking-widest text-sm mb-4">Filtrar por Dia</h3>
+            <div className="flex gap-3 overflow-x-auto pb-2 custom-scrollbar">
+              {Object.keys(ultimosDias).map(data => {
+                const isValid = isMesmoDia(data, dataSelecionada);
+                const dia = new Date(data);
+
+                return (
+                  <button
+                    key={data}
+                    onClick={() => handleMudarData(data)}
+                    className={`flex-shrink-0 w-20 md:w-24 h-24 md:h-28 rounded-2xl border-2 flex flex-col items-center justify-center transition-all active:scale-95 ${isValid
+                      ? 'bg-[#001E50] border-[#001E50] text-white shadow-xl shadow-[#001E50]/30'
+                      : 'bg-white border-gray-200 text-[#001E50] hover:border-[#001E50]/30 hover:bg-gray-50'
+                      }`}
+                  >
+                    <span className={`text-xs font-bold uppercase ${isValid ? 'text-blue-200' : 'text-gray-400'}`}>
+                      {dia.toLocaleDateString('pt-BR', { weekday: 'short' })}
+                    </span>
+                    <span className="text-3xl md:text-4xl font-black tracking-tighter mt-1">
+                      {dia.getDate().toString().padStart(2, '0')}
+                    </span>
+                  </button>
+                )
+              }).reverse()}
+
+              {/* Opcional: Input Date Native fallback customizado */}
+              <div className="flex-shrink-0 flex flex-col justify-center border-l-2 border-dashed border-gray-200 pl-4 ml-2">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Específico</span>
                 <input
                   type="date"
                   value={dataSelecionada}
                   onChange={(e) => handleMudarData(e.target.value)}
-                  className="px-4 py-2 border-2 border-[#001E50]/20 rounded-lg focus:outline-none focus:border-[#001E50] transition-colors"
+                  className="px-3 py-2 bg-gray-50 border-2 border-gray-200 text-sm font-black text-[#001E50] rounded-xl focus:border-[#001E50] outline-none"
                 />
               </div>
-              <button
-                onClick={exportarPDF}
-                disabled={!stats}
-                className="flex items-center gap-2 px-6 py-2 bg-[#001E50] text-white font-bold rounded-lg hover:bg-[#001E50]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-              >
-                <Download className="h-5 w-5" />
-                Exportar PDF
-              </button>
             </div>
           </div>
 
@@ -212,8 +243,8 @@ export default function Relatorio() {
 
             {/* Variação */}
             <div className={`bg-gradient-to-br rounded-2xl p-6 md:p-8 text-white shadow-lg border transition-shadow hover:shadow-xl ${parseFloat(variacao) >= 0
-                ? 'from-green-500 to-green-600 border-green-400/20'
-                : 'from-red-500 to-red-600 border-red-400/20'
+              ? 'from-green-500 to-green-600 border-green-400/20'
+              : 'from-red-500 to-red-600 border-red-400/20'
               }`}>
               <p className="text-xs font-bold uppercase tracking-widest mb-2">
                 Variação
@@ -395,8 +426,8 @@ export default function Relatorio() {
                       setShowSortMenu(false);
                     }}
                     className={`w-full text-left px-4 py-3 font-semibold transition-colors ${sortOption === 'urgencia'
-                        ? 'bg-[#001E50] text-white'
-                        : 'text-[#001E50] hover:bg-[#001E50]/10'
+                      ? 'bg-[#001E50] text-white'
+                      : 'text-[#001E50] hover:bg-[#001E50]/10'
                       }`}
                   >
                     ⚠️ Urgência (Risco Primeiro)
@@ -407,8 +438,8 @@ export default function Relatorio() {
                       setShowSortMenu(false);
                     }}
                     className={`w-full text-left px-4 py-3 font-semibold transition-colors border-t border-[#001E50]/10 ${sortOption === 'recentes'
-                        ? 'bg-[#001E50] text-white'
-                        : 'text-[#001E50] hover:bg-[#001E50]/10'
+                      ? 'bg-[#001E50] text-white'
+                      : 'text-[#001E50] hover:bg-[#001E50]/10'
                       }`}
                   >
                     🕐 Mais Recentes
@@ -419,8 +450,8 @@ export default function Relatorio() {
                       setShowSortMenu(false);
                     }}
                     className={`w-full text-left px-4 py-3 font-semibold transition-colors border-t border-[#001E50]/10 ${sortOption === 'modelo'
-                        ? 'bg-[#001E50] text-white'
-                        : 'text-[#001E50] hover:bg-[#001E50]/10'
+                      ? 'bg-[#001E50] text-white'
+                      : 'text-[#001E50] hover:bg-[#001E50]/10'
                       }`}
                   >
                     🚗 Modelo de Carro
@@ -472,16 +503,16 @@ export default function Relatorio() {
                       <td className="py-3 px-2 text-[#6B7280]">{formatarHorarioLocal(r.horario)}</td>
                       <td className="py-3 px-2">
                         <span className={`px-3 py-1 rounded-full text-xs font-bold ${r.status === 'concluido'
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-amber-100 text-amber-700'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-amber-100 text-amber-700'
                           }`}>
                           {r.status === 'concluido' ? '✓ Concluído' : '⏳ Pendente'}
                         </span>
                       </td>
                       <td className="py-3 px-2">
                         <span className={`font-bold ${r.tempo_total_segundos && r.tempo_total_segundos > 600
-                            ? 'text-red-600'
-                            : 'text-green-600'
+                          ? 'text-red-600'
+                          : 'text-green-600'
                           }`}>
                           {r.tempo_total_segundos ? formatarSegundos(r.tempo_total_segundos) : '-'}
                         </span>

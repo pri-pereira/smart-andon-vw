@@ -15,6 +15,7 @@ interface UseRegistroAndonReturn {
   error: string | null;
   adicionarRegistro: (registro: Omit<RegistroAndonDB, 'id' | 'criado_em' | 'horario'>) => Promise<RegistroAndonDB | null>;
   concluirRegistro: (id: string, usuarioId: string) => Promise<boolean>;
+  marcarComoEntregue: (id: string, usuarioId: string) => Promise<boolean>;
   carregarRegistros: () => Promise<void>;
 }
 
@@ -102,7 +103,7 @@ export function useRegistroAndonSupabase(): UseRegistroAndonReturn {
         // Usamos o tempo do cliente (ISO) que o Supabase converterá para UTC no banco.
         // O importante é que o cliente envie o momento exato.
         const agora = new Date().toISOString();
-        
+
         console.log('Enviando registro para Supabase:', {
           ...registro,
           horario: agora,
@@ -130,7 +131,7 @@ export function useRegistroAndonSupabase(): UseRegistroAndonReturn {
           console.error('Erro Supabase ao inserir:', err);
           throw new Error(err.message || 'Erro ao inserir registro');
         }
-        
+
         if (!data) {
           throw new Error('Nenhum dado retornado do servidor');
         }
@@ -147,26 +148,31 @@ export function useRegistroAndonSupabase(): UseRegistroAndonReturn {
     []
   );
 
+  const marcarComoEntregue = useCallback(async (id: string, usuarioId: string): Promise<boolean> => {
+    try {
+      const { error: err } = await supabase
+        .from('registros_andon')
+        .update({ status: 'entregue' })
+        .eq('id', id);
+
+      if (err) throw err;
+      return true;
+    } catch (err) {
+      console.error('Erro ao sinalizar entrega:', err);
+      return false;
+    }
+  }, []);
+
   const concluirRegistro = useCallback(async (id: string, usuarioId: string): Promise<boolean> => {
     try {
       const registroAtual = registros.find((r) => r.id === id);
-      if (!registroAtual) {
-        console.error('Registro não encontrado no estado local:', id);
-        throw new Error('Registro não encontrado');
-      }
+      if (!registroAtual) throw new Error('Registro não encontrado');
 
       const agora = new Date();
       const tempoTotalSegundos = Math.floor(
         (agora.getTime() - new Date(registroAtual.criado_em).getTime()) / 1000
       );
-      
-      console.log('Iniciando atualização de conclusão:', {
-        id,
-        usuarioId,
-        tempoTotalSegundos,
-      });
 
-      // Campos básicos que temos certeza que existem
       const updateData: any = {
         status: 'concluido',
         concluido_em: agora.toISOString(),
@@ -174,27 +180,17 @@ export function useRegistroAndonSupabase(): UseRegistroAndonReturn {
         tempo_total_segundos: tempoTotalSegundos,
       };
 
-      // Tentar atualizar
       const { error: err } = await supabase
         .from('registros_andon')
         .update(updateData)
         .eq('id', id);
 
-      if (err) {
-        console.error('Erro ao concluir no Supabase:', err);
-        throw new Error(err.message || 'Erro ao atualizar banco de dados');
-      }
+      if (err) throw new Error(err.message);
 
-      console.log('Registro concluído com sucesso no Supabase');
-      
-      // Atualizar estado local imediatamente para feedback instantâneo
       setRegistros(prev => prev.map(r => r.id === id ? { ...r, ...updateData } : r));
-      
       return true;
     } catch (err) {
-      const mensagem = err instanceof Error ? err.message : 'Erro ao concluir registro';
-      setError(mensagem);
-      console.error('Erro na função concluirRegistro:', err);
+      console.error('Erro ao concluir:', err);
       return false;
     }
   }, [registros]);
@@ -204,6 +200,7 @@ export function useRegistroAndonSupabase(): UseRegistroAndonReturn {
     loading,
     error,
     adicionarRegistro,
+    marcarComoEntregue,
     concluirRegistro,
     carregarRegistros,
   };
